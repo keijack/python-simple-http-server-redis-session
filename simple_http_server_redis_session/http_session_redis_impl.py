@@ -25,12 +25,11 @@ SOFTWARE.
 
 import json
 import uuid
-import importlib
 import time
 import redis
+import pickle
 
-import simple_http_server.bean_utils as bean_utils
-from typing import Any, Tuple
+from typing import Any, Tuple, Union
 from simple_http_server import Session, SessionFactory, DEFAULT_ENCODING
 from simple_http_server.logger import get_logger
 
@@ -38,32 +37,30 @@ from simple_http_server.logger import get_logger
 _logger = get_logger("redis_http_session")
 
 
-class ObjectDataWrapper:
-
-    def __init__(self, data: Any = None) -> None:
-        self.data = data
-
-
 class ObjectSerializer:
 
-    def object_to_bytes(self, obj: ObjectDataWrapper) -> bytes:
-        return bean_utils.bean_to_json(obj).encode(DEFAULT_ENCODING)
+    def object_to_bytes(self, obj: Any) -> bytes:
+        return pickle.dumps(obj)
 
-    def bytes_to_objects(self, value: bytes, module: str, clz: str) -> ObjectDataWrapper:
-        mo = importlib.import_module(module)
-        clz = getattr(mo, clz)
-        obj_pro = bean_utils.ObjectProperties(ObjectDataWrapper(bean_utils.new_instance(clz)))
-        val = value.decode(DEFAULT_ENCODING)
-        json_val = json.loads(val)
-        return obj_pro.fill(json_val)
+    def bytes_to_objects(self, value: bytes) -> Any:
+        return pickle.loads(value)
 
 
 def _get_redis_client(host="localhost", port=6379, db=0, username="", password="") -> redis.Redis:
     return redis.Redis(host=host, port=port, db=db, username=username, password=password)
 
 
-def _get_session_hash_name(session_id: str) -> bytes:
+def _get_session_hash_name(session_id: str) -> str:
     return f"__py_si_ht_se_{session_id}".encode(DEFAULT_ENCODING)
+
+
+def _to_byte(val: Union[bytes, str]) -> bytes:
+    if isinstance(val, bytes):
+        return val
+    elif isinstance(val, str):
+        return val.encode(DEFAULT_ENCODING)
+    else:
+        return f"{val}".encode(DEFAULT_ENCODING)
 
 
 class RedisSessionImpl(Session):
@@ -89,11 +86,13 @@ class RedisSessionImpl(Session):
         self.__set_("last_accessed_time", self.__clz_creation_time)
 
     def __set_(self, key: str, val: Any):
-        v = val if isinstance(val, bytes) else str(val).encode(DEFAULT_ENCODING)
-        self.__redis.hset(self.__redis_hash_name, key.encode(DEFAULT_ENCODING), v)
+        self.__redis.hset(self.__redis_hash_name, _to_byte(key), _to_byte(val))
 
     def __get_(self, key: str) -> bytes:
-        return self.__redis.hget(self.__redis_hash_name, key)
+        return self.__redis.hget(self.__redis_hash_name, _to_byte(key))
+
+    def __exists(self, key: str) -> bool:
+        return self.__redis.hexists(self.__redis_hash_name, _to_byte(key))
 
     def __set_expire(self):
         self.__redis.expire(self.__redis_hash_name, self.max_inactive_interval)
@@ -132,22 +131,13 @@ class RedisSessionImpl(Session):
 
     def get_attribute(self, name: str) -> Any:
         val_key = f"val_{name}"
-        if not self.__redis.hexists(self.__redis_hash_name, val_key):
+        if not self.__exists(val_key):
             return None
         val = self.__get_(val_key)
-        mod = self.__get_(f"mod_{name}").decode(DEFAULT_ENCODING)
-        clz = self.__get_(f"clz_{name}").decode(DEFAULT_ENCODING)
-        _logger.debug(f"get from sever {name}:{mod}.{clz}:{val} to session: {self.__redis_hash_name}")
-        obj_warpper = self.__obj_ser.bytes_to_objects(val, mod, clz)
-        return obj_warpper.data
+        return self.__obj_ser.bytes_to_objects(val)
 
     def set_attribute(self, name: str, value: Any) -> None:
-        val = self.__obj_ser.object_to_bytes(ObjectDataWrapper(value))
-        val_type: type = type(value)
-        _logger.debug(f"save {name}:{val_type}:{value} to session: {self.__redis_hash_name}")
-        self.__set_(f"mod_{name}", val_type.__module__)
-        self.__set_(f"clz_{name}", val_type.__name__)
-        self.__set_(f"val_{name}", val)
+        self.__set_(f"val_{name}", self.__obj_ser.object_to_bytes(value))
 
     def invalidate(self) -> None:
         self.__redis.delete(self.__redis_hash_name)

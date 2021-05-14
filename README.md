@@ -24,64 +24,21 @@ def main(*args):
 
 ```
 
-## The Data Structure Saved to Redis
-
-This module try to covert all the objects to json and save it to redis. However, it's quite hard to decide which properties should be saved or which should not. 
-
-And after a consideration, I decided that only the properties which are `public` which without `_` prefix should be saved. 
-
-```python
-
-class MyData:
-
-    # will be saved
-    clz_a = "x"
-    # won't be saved
-    _clz_a = "y"
-
-    def __init__(self):
-        # will be saved
-        self.a = "a"
-        # won't be saved
-        self._x = "x"
-        # won't be saved
-        self.__y = "y"
-
-    # will be saved, but cannot be loaded back for there is no setter
-    @property
-    def x(self):
-        return self._x
-
-    # will be saved
-    @property
-    def y(self):
-        return self.__y
-
-    @y.setter
-    def y(self, val):
-        self.__y = val
-```
-...
 ## Write Your Own ObjectSerializer
 
-If the defalut serialization logic could not satisfy you, you can write your own
+Module `pickle` is used to do the serialization and deserialization, if the defalut serialization logic could not satisfy you, you can write your own
 
 ```python
-simple_http_server_redis_session.http_session_redis_impl import ObjectSerializer, ObjectDataWrapper
+simple_http_server_redis_session.http_session_redis_impl import ObjectSerializer
 
 class MyObjectSerializer(ObjectSerializer):
 
-    def object_to_bytes(self, obj: ObjectDataWrapper) -> bytes:
+    def object_to_bytes(self, obj: Any) -> bytes:
         bys = ...
         return bys
 
-    def bytes_to_objects(self, value: bytes, module: str, clz: str) -> ObjectDataWrapper:
-        """
-        " value: the bytes stream comes from `object_to_bytes` method
-        " module: the module of ObjectDataWrapper.data 
-        " clz: the class of ObjectDataWrapper.data 
-        """
-        data = ...
-        return ObjectDataWrapper(data)
+    def bytes_to_objects(self, value: bytes) -> Any:
+        obj = ...
+        return obj
 ```
 

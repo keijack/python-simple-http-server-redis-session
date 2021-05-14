@@ -26,62 +26,21 @@ def main(*args):
 
 ```
 
-## 哪些内容会保存到 redis
-
-本模块尝试将所有的类转换成 json 然后保存到 redis，取得的时候再从 redis 取出，保存到 redis 中的内容仅保存`公共`即无`_`开头的字段。参考以下例子：
-
-```python
-
-class MyData:
-
-    # 会被保存
-    clz_a = "x"
-    # 不会被保存
-    _clz_a = "y"
-
-    def __init__(self):
-        # 会被保存
-        self.a = "a"
-        # 不会被保存
-        self._x = "x"
-        # 不会被保存
-        self.__y = "y"
-
-    # 会被保存, 但由于无 setter，所以取得的时候不会加载。
-    @property
-    def x(self):
-        return self._x
-
-    # 会被保存
-    @property
-    def y(self):
-        return self.__y
-
-    @y.setter
-    def y(self, val):
-        self.__y = val
-```
-
 ## 编写你自己的序列化逻辑
 
-如果上述的序列化逻辑无法满足你的需求，你可以编写自己的序列化逻辑。
+默认情况下，我们会使用 `pickle` 来序列化和反序列化类，如果上述的序列化逻辑无法满足你的需求，你可以编写自己的序列化逻辑。
 
 ```python
-simple_http_server_redis_session.http_session_redis_impl import ObjectSerializer, ObjectDataWrapper
+simple_http_server_redis_session.http_session_redis_impl import ObjectSerializer
 
 class MyObjectSerializer(ObjectSerializer):
 
-    def object_to_bytes(self, obj: ObjectDataWrapper) -> bytes:
+    def object_to_bytes(self, obj: Any) -> bytes:
         bys = ...
         return bys
 
-    def bytes_to_objects(self, value: bytes, module: str, clz: str) -> ObjectDataWrapper:
-        """
-        " value: `object_to_bytes` 方法转成的字节流
-        " module: ObjectDataWrapper.data 的模块
-        " clz: ObjectDataWrapper.data 的类名
-        """
-        data = ...
-        return ObjectDataWrapper(data)
+    def bytes_to_objects(self, value: bytes) -> Any:
+        obj = ...
+        return obj
 ```
 
