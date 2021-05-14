@@ -127,13 +127,14 @@ class RedisSessionImpl(Session):
     def attribute_names(self) -> Tuple:
         keys = self.__redis.hkeys(self.__redis_hash_name)
         pre = "val_"
-        return tuple([k[len(pre):].decode(DEFAULT_ENCODING) for k in keys if k.decode(DEFAULT_ENCODING).startswith(pre)])
+        return tuple([k.decode(DEFAULT_ENCODING)[len(pre):] for k in keys if k.decode(DEFAULT_ENCODING).startswith(pre)])
 
     def get_attribute(self, name: str) -> Any:
         val_key = f"val_{name}"
         if not self.__exists(val_key):
             return None
         val = self.__get_(val_key)
+        _logger.debug(f"Get attribute {name} -> bytes -> {val}")
         return self.__obj_ser.bytes_to_objects(val)
 
     def set_attribute(self, name: str, value: Any) -> None:
