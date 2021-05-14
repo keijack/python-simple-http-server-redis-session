@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Copyright (c) 2018 Keijack Wu
+Copyright (c) 2021 Keijack Wu
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -58,22 +58,26 @@ class ObjectSerializer:
         return obj_pro.fill(json_val)
 
 
-def get_redis_client(host="localhost", port=6379, db=0, username="", password="") -> redis.Redis:
+def _get_redis_client(host="localhost", port=6379, db=0, username="", password="") -> redis.Redis:
     return redis.Redis(host=host, port=port, db=db, username=username, password=password)
+
+
+def _get_session_hash_name(session_id: str) -> bytes:
+    return f"__py_si_ht_se_{session_id}".encode(DEFAULT_ENCODING)
 
 
 class RedisSessionImpl(Session):
 
-    def __init__(self, id: str, obj_serializer: ObjectSerializer,  host="localhost", port=6379, db=0, username="", password=""):
+    def __init__(self, id: str, obj_serializer: ObjectSerializer, redis: redis.Redis):
         super().__init__()
         self.__id = id if id else uuid.uuid4().hex
-        self.__redis_hash_name = f"__py_si_ht_se_{self.__id}"
+        self.__redis_hash_name = _get_session_hash_name(self.__id)
         self.__obj_ser: ObjectSerializer = obj_serializer
 
         self.__clz_creation_time = time.time()
         self.__is_new = False
 
-        self.__redis = get_redis_client(host=host, port=port, db=db, username=username, password=password)
+        self.__redis = redis
         self.__sync_redis()
         self.__set_expire()
 
@@ -86,7 +90,7 @@ class RedisSessionImpl(Session):
 
     def __set_(self, key: str, val: Any):
         v = val if isinstance(val, bytes) else str(val).encode(DEFAULT_ENCODING)
-        self.__redis.hset(self.__redis_hash_name, key, v)
+        self.__redis.hset(self.__redis_hash_name, key.encode(DEFAULT_ENCODING), v)
 
     def __get_(self, key: str) -> bytes:
         return self.__redis.hget(self.__redis_hash_name, key)
@@ -123,7 +127,8 @@ class RedisSessionImpl(Session):
     @property
     def attribute_names(self) -> Tuple:
         keys = self.__redis.hkeys(self.__redis_hash_name)
-        return tuple([k for k in keys if k.decode(DEFAULT_ENCODING).startswith('val_')])
+        pre = "val_"
+        return tuple([k[len(pre):].decode(DEFAULT_ENCODING) for k in keys if k.decode(DEFAULT_ENCODING).startswith(pre)])
 
     def get_attribute(self, name: str) -> Any:
         val_key = f"val_{name}"
@@ -152,11 +157,11 @@ class RedisSessionFactory(SessionFactory):
 
     def __init__(self, host="localhost", port=6379, db=0, username="", password="", obj_serializer: ObjectSerializer = ObjectSerializer()):
         self.__obj_ser: ObjectSerializer = obj_serializer
-        self.__host = host
-        self.__port = port
-        self.__db = db
-        self.__username = username
-        self.__password = password
+        self.__redis = _get_redis_client(host=host, port=port, db=db, username=username, password=password)
 
     def get_session(self, session_id: str, create: bool = False) -> Session:
-        return RedisSessionImpl(session_id, self.__obj_ser, host=self.__host, port=self.__port, db=self.__db, username=self.__username, password=self.__password)
+        hash_name = _get_session_hash_name(session_id)
+        if not self.__redis.exists(hash_name) and not create:
+            return None
+        else:
+            return RedisSessionImpl(session_id, self.__obj_ser, self.__redis)
