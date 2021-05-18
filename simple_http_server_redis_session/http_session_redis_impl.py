@@ -146,9 +146,9 @@ class RedisSessionImpl(Session):
 
 class RedisSessionFactory(SessionFactory):
 
-    def __init__(self, host="localhost", port=6379, db=0, username="", password="", obj_serializer: ObjectSerializer = ObjectSerializer()):
-        self.__obj_ser: ObjectSerializer = obj_serializer
-        self.__redis = _get_redis_client(host=host, port=port, db=db, username=username, password=password)
+    def __init__(self, host="localhost", port=6379, db=0, username="", password="", redis_client: redis.Redis = None, object_serializer: ObjectSerializer = None):
+        self.__obj_ser = object_serializer or ObjectSerializer()
+        self.__redis = redis_client or _get_redis_client(host=host, port=port, db=db, username=username, password=password)
 
     def get_session(self, session_id: str, create: bool = False) -> Session:
         hash_name = _get_session_hash_name(session_id)

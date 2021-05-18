@@ -22,4 +22,4 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 name = "simple_http_server_redis_session"
-version = "0.2.1"
+version = "0.3.0"

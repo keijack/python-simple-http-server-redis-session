@@ -24,6 +24,27 @@ def main(*args):
 
 ```
 
+or you can re-use your redis client which might be used in other codes.
+
+```python
+import simple_http_server
+import simple_http_server.server as server
+import os
+import redis
+from simple_http_server_redis_session.http_session_redis_impl import RedisSessionFactory
+
+def main(*args):
+    # This redis client can be used in other business codes.
+    redis_client = redis.Redis(host="10.0.2.16", port=6379, db=0, username="", password="")
+    simple_http_server.set_session_factory(RedisSessionFactory(redis_client=redis_client))
+    
+    root = os.path.dirname(os.path.abspath(__file__))
+    server.start(
+        port=9090,
+        resources={"/public/*": f"{root}/tests/static"})
+
+```
+
 ## Write Your Own ObjectSerializer
 
 Module `pickle` is used to do the serialization and deserialization, if the defalut serialization logic could not satisfy you, you can write your own
@@ -40,5 +61,10 @@ class MyObjectSerializer(ObjectSerializer):
     def bytes_to_objects(self, value: bytes) -> Any:
         obj = ...
         return obj
+
+# Set it when initializing a SessionFactory.
+
+simple_http_server.set_session_factory(RedisSessionFactory(host="10.0.2.16", port=6379, db=0, username="", password="", object_serializer=MyObjectSerializer()))
 ```
+
 
