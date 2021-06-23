@@ -23,13 +23,12 @@ SOFTWARE.
 """
 
 
-import json
 import uuid
 import time
 import redis
 import pickle
 
-from typing import Any, Tuple, Union
+from typing import Any, List, Tuple, Union
 from simple_http_server import Session, SessionFactory, DEFAULT_ENCODING
 from simple_http_server.logger import get_logger
 
@@ -64,6 +63,8 @@ def _to_byte(val: Union[bytes, str]) -> bytes:
 
 
 class RedisSessionImpl(Session):
+
+    _KEY_PRE: str = "val_"
 
     def __init__(self, id: str, obj_serializer: ObjectSerializer, redis: redis.Redis):
         super().__init__()
@@ -125,12 +126,11 @@ class RedisSessionImpl(Session):
 
     @property
     def attribute_names(self) -> Tuple:
-        keys = self.__redis.hkeys(self.__redis_hash_name)
-        pre = "val_"
-        return tuple([k.decode(DEFAULT_ENCODING)[len(pre):] for k in keys if k.decode(DEFAULT_ENCODING).startswith(pre)])
+        keys: List[bytes] = self.__redis.hkeys(self.__redis_hash_name)
+        return tuple([k.decode(DEFAULT_ENCODING)[len(self._KEY_PRE):] for k in keys if k.decode(DEFAULT_ENCODING).startswith(self._KEY_PRE)])
 
     def get_attribute(self, name: str) -> Any:
-        val_key = f"val_{name}"
+        val_key = f"{self._KEY_PRE}{name}"
         if not self.__exists(val_key):
             return None
         val = self.__get_(val_key)
@@ -138,7 +138,7 @@ class RedisSessionImpl(Session):
         return self.__obj_ser.bytes_to_objects(val)
 
     def set_attribute(self, name: str, value: Any) -> None:
-        self.__set_(f"val_{name}", self.__obj_ser.object_to_bytes(value))
+        self.__set_(f"{self._KEY_PRE}{name}", self.__obj_ser.object_to_bytes(value))
 
     def invalidate(self) -> None:
         self.__redis.delete(self.__redis_hash_name)
